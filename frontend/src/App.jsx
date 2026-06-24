@@ -21,8 +21,9 @@ export default function App() {
     setStats(null)
     setProgress({ done: 0, total: 0 })
 
+    const { token, ...rest } = params
     const qs = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
+    Object.entries(rest).forEach(([k, v]) => {
       if (Array.isArray(v)) v.forEach(item => qs.append(k, item))
       else qs.append(k, v)
     })
@@ -33,6 +34,7 @@ export default function App() {
     try {
       const res = await fetch(`http://localhost:8000/search?${qs}`, {
         signal: ctrl.signal,
+        headers: { "X-GitHub-Token": token },
       })
 
       if (!res.ok) throw new Error(`Erreur serveur : ${res.status}`)

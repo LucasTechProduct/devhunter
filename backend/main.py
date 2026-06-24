@@ -7,7 +7,7 @@ import time
 from typing import AsyncGenerator
 
 import httpx
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -221,7 +221,7 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
 
 @app.get("/search")
 async def search(
-    token: str = Query(...),
+    x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
     strategy: str = Query("mixed"),
     nodejs: bool = Query(True),
@@ -245,14 +245,14 @@ async def search(
         "custom_skills": custom_skills,
     }
     return StreamingResponse(
-        run_search(token, criteria, count),
+        run_search(x_github_token, criteria, count),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 @app.get("/export")
 async def export_csv(
-    token: str = Query(...),
+    x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
     strategy: str = Query("mixed"),
     nodejs: bool = Query(True),
@@ -273,7 +273,7 @@ async def export_csv(
     }
     patterns = build_regexes(criteria)
     all_profiles = []
-    async for chunk in run_search(token, criteria, count):
+    async for chunk in run_search(x_github_token, criteria, count):
         line = chunk.replace("data: ", "").strip()
         if not line:
             continue
