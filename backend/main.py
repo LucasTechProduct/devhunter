@@ -219,7 +219,11 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
             "avg_score": sum(score_user(u, patterns) for u in profiles) // max(len(profiles), 1),
         })
 
-@app.get("/search")
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+
 async def search(
     x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
