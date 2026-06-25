@@ -32,7 +32,8 @@ export default function App() {
     abortRef.current = ctrl
 
     try {
-      const res = await fetch(`http://localhost:8000/search?${qs}`, {
+      const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
+      const res = await fetch(`${API}/search?${qs}`, {
         signal: ctrl.signal,
         headers: { "X-GitHub-Token": token },
       })
