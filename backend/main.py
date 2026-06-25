@@ -2,6 +2,7 @@ import asyncio
 import csv
 import io
 import json
+import os
 import re
 import time
 from typing import AsyncGenerator
@@ -9,7 +10,8 @@ from typing import AsyncGenerator
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -19,6 +21,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Servir le frontend React (build Vite) ─────────────────────────────────────
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIST, "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+
 
 # ── Repos Node.js de référence ─────────────────────────────────────────────────
 
@@ -303,3 +315,12 @@ async def export_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=devs-fr.csv"},
     )
+
+# ── Catch-all SPA (doit être en dernier) ──────────────────────────────────────
+if os.path.exists(FRONTEND_DIST):
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file_path = os.path.join(FRONTEND_DIST, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
