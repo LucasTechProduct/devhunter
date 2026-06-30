@@ -8,16 +8,30 @@ import time
 from typing import AsyncGenerator
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# ── Rate limiting (5 recherches / minute / IP) ─────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── CORS restreint au domaine de prod (+ localhost pour le dev) ───────────────
+ALLOWED_ORIGINS = [
+    "https://devhunter.onrender.com",
+    "http://localhost:3000",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -249,7 +263,9 @@ async def ping():
 
 
 @app.get("/search")
+@limiter.limit("5/minute")
 async def search(
+    request: Request,
     x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
     strategy: str = Query("mixed"),
@@ -280,7 +296,9 @@ async def search(
     )
 
 @app.get("/export")
+@limiter.limit("5/minute")
 async def export_csv(
+    request: Request,
     x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
     strategy: str = Query("mixed"),
