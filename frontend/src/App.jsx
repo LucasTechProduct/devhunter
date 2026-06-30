@@ -117,8 +117,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo">DevHunter</div>
-        <p className="tagline">Sourcez des développeurs sur GitHub · Export CSV instantané</p>
+        <div className="app-logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 6V12C4 17 7.5 21 12 22C16.5 21 20 17 20 12V6L12 2Z" fill="white"/>
+          </svg>
+        </div>
+        <div className="app-header-text">
+          <div className="logo">Dev<span>Hunter</span></div>
+          <p className="tagline">Sourcez des développeurs sur GitHub · Export CSV instantané</p>
+        </div>
       </header>
 
       <main className="app-main">
