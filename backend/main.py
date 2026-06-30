@@ -236,6 +236,7 @@ async def ping():
     return {"status": "ok"}
 
 
+@app.get("/search")
 async def search(
     x_github_token: str = Header(..., alias="X-GitHub-Token"),
     count: int = Query(25),
