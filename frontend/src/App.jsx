@@ -31,16 +31,20 @@ export default function App() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
 
+    const API = window.location.hostname === "localhost"
+      ? "http://localhost:8000"
+      : `${window.location.protocol}//${window.location.hostname}`
+
     try {
-      const API = window.location.hostname === "localhost"
-        ? "http://localhost:8000"
-        : `${window.location.protocol}//${window.location.hostname}`
       const res = await fetch(`${API}/search?${qs}`, {
         signal: ctrl.signal,
         headers: { "X-GitHub-Token": token },
       })
 
-      if (!res.ok) throw new Error(`Erreur serveur : ${res.status}`)
+      if (!res.ok) {
+        const body = await res.text().catch(() => "")
+        throw new Error(`Le serveur a répondu ${res.status} (${res.statusText}). ${body.slice(0, 200)}`)
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -72,7 +76,13 @@ export default function App() {
       }
     } catch (e) {
       if (e.name !== "AbortError") {
-        addLog("❌ Impossible de contacter le serveur local (port 8000). Lance bien le backend !")
+        if (e instanceof TypeError) {
+          // fetch a échoué avant même d'atteindre le serveur (réseau, CORS, serveur down)
+          addLog(`❌ Connexion impossible à ${API}. Vérifie que le backend tourne.`)
+        } else {
+          // Erreur survenue après connexion réussie (parsing, stream, erreur serveur)
+          addLog(`❌ Erreur pendant la recherche : ${e.message}`)
+        }
         setPhase("error")
       }
     }
