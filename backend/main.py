@@ -141,7 +141,7 @@ async def gh_get(client: httpx.AsyncClient, path: str, token: str, params=None):
 def sse(event: str, data: dict) -> str:
     return f"data: {json.dumps({'event': event, **data})}\n\n"
 
-async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[str, None]:
+async def run_search(token: str, criteria: dict, count: int, min_score: int = 30) -> AsyncGenerator[str, None]:
     patterns = build_regexes(criteria)
     locations = [loc.strip().lower() for loc in criteria.get("locations", []) if loc.strip()]
     strategy = criteria.get("strategy", "mixed")
@@ -209,8 +209,9 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
 
         # ── Récupération détails + filtre ────────────────────────────────────
         profiles = []
-        max_checks = min(len(logins), count * 8)  # ne pas dépasser 8x la cible en vérifications
+        max_checks = min(len(logins), count * 12)  # ne pas dépasser 12x la cible en vérifications
         checked = 0
+        rejected_low_score = 0
 
         for i, login in enumerate(logins):
             if len(profiles) >= count * 2:
@@ -223,6 +224,9 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
                 user = await gh_get(client, f"/users/{login}", token)
                 if user and is_french(user, locations):
                     sc = score_user(user, patterns)
+                    if sc <= min_score:
+                        rejected_low_score += 1
+                        continue
                     profiles.append(user)
                     yield sse("profile", {
                         "login": user["login"],
@@ -246,7 +250,9 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
             await asyncio.sleep(0.15)
 
         if not profiles:
-            yield sse("log", {"msg": "⚠ Aucun profil ne correspond aux critères de localisation après vérification."})
+            yield sse("log", {"msg": f"⚠ Aucun profil ne correspond (score > {min_score}) après vérification de {checked} profils francophones. Essaie d'élargir tes critères."})
+        elif rejected_low_score:
+            yield sse("log", {"msg": f"ℹ {rejected_low_score} profil(s) rejeté(s) car score ≤ {min_score}"})
 
         profiles.sort(key=lambda u: score_user(u, patterns), reverse=True)
         profiles = profiles[:count]
@@ -275,6 +281,7 @@ async def search(
     react: bool = Query(False),
     language: str = Query("javascript"),
     min_followers: int = Query(10),
+    min_score: int = Query(30),
     locations: list[str] = Query(default=["France"]),
     custom_skills: list[str] = Query(default=[]),
 ):
@@ -290,7 +297,7 @@ async def search(
         "custom_skills": custom_skills,
     }
     return StreamingResponse(
-        run_search(x_github_token, criteria, count),
+        run_search(x_github_token, criteria, count, min_score),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -308,6 +315,7 @@ async def export_csv(
     react: bool = Query(False),
     language: str = Query("javascript"),
     min_followers: int = Query(10),
+    min_score: int = Query(30),
     locations: list[str] = Query(default=["France"]),
     custom_skills: list[str] = Query(default=[]),
 ):
@@ -320,7 +328,7 @@ async def export_csv(
     }
     patterns = build_regexes(criteria)
     all_profiles = []
-    async for chunk in run_search(x_github_token, criteria, count):
+    async for chunk in run_search(x_github_token, criteria, count, min_score):
         line = chunk.replace("data: ", "").strip()
         if not line:
             continue
