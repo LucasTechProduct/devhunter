@@ -96,7 +96,9 @@ def is_french(user: dict, locations: list) -> bool:
         user.get("blog") or "",
         user.get("company") or "",
     ]).lower()
-    kw_list = locations if locations else FR_KEYWORDS
+    # On combine toujours la liste enrichie FR_KEYWORDS avec les locations
+    # choisies par l'utilisateur, pour ne jamais perdre les variantes connues.
+    kw_list = set(FR_KEYWORDS) | set(locations or [])
     return any(kw in combined for kw in kw_list)
 
 def badge_list(user: dict, patterns: dict) -> str:
@@ -193,9 +195,16 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
 
         # ── Récupération détails + filtre ────────────────────────────────────
         profiles = []
+        max_checks = min(len(logins), count * 8)  # ne pas dépasser 8x la cible en vérifications
+        checked = 0
+
         for i, login in enumerate(logins):
             if len(profiles) >= count * 2:
                 break
+            if checked >= max_checks:
+                yield sse("log", {"msg": f"⚠ Limite de vérifications atteinte ({max_checks}) — arrêt anticipé"})
+                break
+            checked += 1
             try:
                 user = await gh_get(client, f"/users/{login}", token)
                 if user and is_french(user, locations):
@@ -219,8 +228,11 @@ async def run_search(token: str, criteria: dict, count: int) -> AsyncGenerator[s
             except Exception:
                 pass
             if i % 5 == 0:
-                yield sse("progress", {"step": "details", "total": len(logins), "done": i + 1})
+                yield sse("progress", {"step": "details", "total": min(len(logins), max_checks), "done": i + 1})
             await asyncio.sleep(0.15)
+
+        if not profiles:
+            yield sse("log", {"msg": "⚠ Aucun profil ne correspond aux critères de localisation après vérification."})
 
         profiles.sort(key=lambda u: score_user(u, patterns), reverse=True)
         profiles = profiles[:count]
